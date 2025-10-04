@@ -205,3 +205,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific ignores
+
+# Local datasets
+data/*.csv
+data/*.json
+data/*.nc
+
+# Elasticsearch configs (if you generate API keys locally)
+elastic/*.json
+
+# VS Code settings
+.vscode/
+
+# macOS junk
+.DS_Store
+
