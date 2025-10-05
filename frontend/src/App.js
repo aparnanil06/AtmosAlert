@@ -26,37 +26,38 @@ function App() {
       
       const data = await response.json();
       setAqiData(data);
+      
       // FEV1 5-year projection
-try {
-  const resp = await fetch(
-    `http://127.0.0.1:8000/api/predict?location=${encodeURIComponent(location)}`
-  );
+      try {
+        const resp = await fetch(
+          `http://localhost:8090/api/predict?location=${encodeURIComponent(location)}`
+        );
 
-  // Read raw text first so we can surface backend errors that aren’t JSON
-  const text = await resp.text();
-  if (!resp.ok) {
-    throw new Error(`API ${resp.status}: ${text.slice(0,200)}`);
-  }
+        // Read raw text first so we can surface backend errors that aren't JSON
+        const text = await resp.text();
+        if (!resp.ok) {
+          throw new Error(`API ${resp.status}: ${text.slice(0,200)}`);
+        }
 
-  // Parse JSON safely
-  let fev1;
-  try {
-    fev1 = JSON.parse(text);
-  } catch {
-    throw new Error(`Invalid JSON from API: ${text.slice(0,200)}`);
-  }
+        // Parse JSON safely
+        let fev1;
+        try {
+          fev1 = JSON.parse(text);
+        } catch {
+          throw new Error(`Invalid JSON from API: ${text.slice(0,200)}`);
+        }
 
-  // Expect { projected_capacity_percent, risk_level, location }
-  if (typeof fev1.projected_capacity_percent !== "number") {
-    throw new Error("API missing projected_capacity_percent");
-  }
+        // Expect { projected_capacity_percent, risk_level, location }
+        if (typeof fev1.projected_capacity_percent !== "number") {
+          throw new Error("API missing projected_capacity_percent");
+        }
 
-  setFev1Data(fev1);
-} catch (e) {
-  console.error("FEV1 fetch failed:", e);
-  setFev1Data(null);
-  // optional: setError(String(e));
-}
+        setFev1Data(fev1);
+      } catch (e) {
+        console.error("FEV1 fetch failed:", e);
+        setFev1Data(null);
+        // optional: setError(String(e));
+      }
     } catch (err) {
       setError(err.message);
       setAqiData(null);
@@ -99,15 +100,8 @@ try {
             <div className="right-column">
               <div className="visualization-section">
                 <h2>Long-term Exposure Impact</h2>
-<<<<<<< HEAD
-                {fev1Data ? (
-                  <LungVisualization projectedCapacityPercent={82.3} />
-                ) : (
-                  <div style={{ height: 260 }} />  // optional spacer/skeleton
-=======
                 {fev1Data && (
                   <LungVisualization projectedCapacityPercent={fev1Data.projected_capacity_percent} />
->>>>>>> 1062f60f71a3561ab52baf758fdbb55347ad8dd0
                 )}
               </div>
             </div>

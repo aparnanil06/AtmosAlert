@@ -6,7 +6,7 @@ function PollutantTable({ pollutants }) {
   const getAQIColor = (aqi) => {
     if (aqi === null) return '#999';
     if (aqi <= 50) return '#00e400';
-    if (aqi <= 100) return '#ffff00';
+    if (aqi <= 100) return '#fbbf24';
     if (aqi <= 150) return '#ff7e00';
     if (aqi <= 200) return '#ff0000';
     if (aqi <= 300) return '#8f3f97';
