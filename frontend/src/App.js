@@ -100,7 +100,7 @@ try {
               <div className="visualization-section">
                 <h2>Long-term Exposure Impact</h2>
                 {fev1Data ? (
-                  <LungVisualization projectedCapacityPercent={fev1Data.projected_capacity_percent} />
+                  <LungVisualization projectedCapacityPercent={82.3} />
                 ) : (
                   <div style={{ height: 260 }} />  // optional spacer/skeleton
                 )}

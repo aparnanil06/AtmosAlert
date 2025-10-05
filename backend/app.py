@@ -5,12 +5,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from elasticsearch import Elasticsearch, helpers
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 load_dotenv()
 ES_URL = os.getenv("ELASTIC_URL")
 ES_KEY = os.getenv("ELASTIC_API_KEY")
 AIRNOW_KEY = os.getenv("AIRNOW_API_KEY")
 INDEX = "tempo-exposure"
+
+class AlertSubscription(BaseModel):
+    email: str
+    location: str
+    threshold: int = 100
+
 
 if not ES_URL or not ES_KEY:
     raise RuntimeError("Set ELASTIC_URL and ELASTIC_API_KEY in .env")
@@ -179,7 +186,7 @@ def test_es(lat: float = 37.9716, lon: float = -87.5711, radius_km: float = 25.0
             {"range": {"@timestamp": {"gte": "now-3h"}}},
             {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
         ]}},
-        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant.keyword", "size": 10},
                  "aggs": {"latest": {"top_hits": {"size": 1, "sort": [{"@timestamp": "desc"}],
                            "_source": {"includes": ["aqi","value","unit","location_name"]}}}}}}
     }
@@ -221,7 +228,7 @@ def get_aqi(
             {"range": {"@timestamp": {"gte": "now-3h"}}},
             {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
         ]}},
-        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant.keyword", "size": 10},
                  "aggs": {"latest": {"top_hits": {"size": 1, "sort": [{"@timestamp": "desc"}],
                            "_source": {"includes": ["aqi","value","unit","location_name"]}}}}}}
     }
@@ -266,7 +273,7 @@ def get_aqi(
             {"range": {"@timestamp": {"gte": "now-24h"}}},
             {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
         ]}},
-        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant.keyword", "size": 10},
                  "aggs": {"avg_value": {"avg": {"field": "value"}}}}}
     }
     
@@ -299,3 +306,19 @@ def get_aqi(
 def health():
     ok = es.ping()
     return {"ok": ok}
+
+@app.post("/api/subscribe")
+def subscribe_alerts(subscription: AlertSubscription):
+    """Subscribe to air quality alerts"""
+    import sys
+    sys.path.append('.')
+    from notifications import add_user
+    
+    # Detect if it's a ZIP code or address
+    location_type = "zip" if subscription.location.isdigit() else "address"
+    result = add_user(subscription.email, location_type, subscription.location, subscription.threshold)
+    
+    if result.get('success'):
+        return {"success": True, "message": "Successfully signed up for alerts!"}
+    else:
+        raise HTTPException(400, detail=result.get('error', 'Failed to sign up'))
