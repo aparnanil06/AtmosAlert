@@ -6,3 +6,6 @@ pydantic
 requests
 sendgrid
 schedule
+pandas
+numpy
+scikit-learn
