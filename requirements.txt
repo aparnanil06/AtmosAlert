@@ -4,3 +4,6 @@ elasticsearch
 python-dotenv
 pydantic
 requests
+pandas
+numpy
+scikit-learn
