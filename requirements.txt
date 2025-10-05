@@ -4,3 +4,5 @@ elasticsearch
 python-dotenv
 pydantic
 requests
+sendgrid
+schedule
