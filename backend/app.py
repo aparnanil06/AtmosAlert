@@ -15,6 +15,7 @@ INDEX = "tempo-exposure"
 if not ES_URL or not ES_KEY:
     raise RuntimeError("Set ELASTIC_URL and ELASTIC_API_KEY in .env")
 
+# FIXED: Use api_key parameter instead of headers
 es = Elasticsearch(ES_URL, api_key=ES_KEY)
 
 app = FastAPI(title="AirTime Capsule API", version="0.1.0")
@@ -41,22 +42,24 @@ AQI_BANDS = [
     (301, 500, "Hazardous",
      "Stay indoors with HEPA filtration; avoid exertion; follow emergency guidance.")
 ]
+
 def aqi_category(aqi: Optional[int]):
-    if aqi is None: return {"label":"Unknown","message":"No guidance available.","band":[None,None]}
+    if aqi is None: 
+        return {"label":"Unknown","message":"No guidance available.","band":[None,None]}
     for lo, hi, label, msg in AQI_BANDS:
-        if lo <= aqi <= hi: return {"label":label,"message":msg,"band":[lo,hi]}
+        if lo <= aqi <= hi: 
+            return {"label":label,"message":msg,"band":[lo,hi]}
     return {"label":"Unknown","message":"No guidance available.","band":[None,None]}
 
 def exposure_score(pm25_24h: Optional[float], years: float=10.0):
-    # Heuristic vs WHO PM2.5 daily guideline (15 µg/m³). You can switch to EPA (35) if desired.
-    if pm25_24h is None: return {"score":0,"stress_pct":0}
+    if pm25_24h is None: 
+        return {"score":0,"stress_pct":0}
     REF = 15.0
     ratio = max(pm25_24h/REF, 0.0)
     score = min(ratio * years * 10, 100)
     return {"score":score, "stress_pct":round(score)}
 
 def geocode(address: str):
-    # Simple geocoder via Nominatim (no key). Replace with Mapbox/Google later if needed.
     r = requests.get(
         "https://nominatim.openstreetmap.org/search",
         params={"q": address, "format": "json", "limit": 1},
@@ -77,18 +80,26 @@ def airnow_latest(lat: float, lon: float, distance_miles: int = 50) -> List[Dict
         "format": "application/json",
         "latitude": lat,
         "longitude": lon,
-        "distance": distance_miles,  # miles
+        "distance": distance_miles,
         "API_KEY": AIRNOW_KEY
     }
-    r = requests.get(url, params=params, timeout=20)
-    if r.status_code != 200:
+    
+    try:
+        r = requests.get(url, params=params, timeout=10)  # Reduced timeout
+        if r.status_code != 200:
+            return []
+    except requests.exceptions.Timeout:
+        print(f"AirNow API timeout for lat={lat}, lon={lon}")
         return []
+    except Exception as e:
+        print(f"AirNow API error: {e}")
+        return []
+    
     rows = []
     pmap = {"PM2.5":"pm25","PM10":"pm10","O3":"o3","NO2":"no2","CO":"co","SO2":"so2"}
     for obs in r.json():
         pollutant = pmap.get(obs.get("ParameterName"), obs.get("ParameterName"))
         hour = str(obs.get("HourObserved")).zfill(2)
-        # AirNow’s DateObserved/HourObserved are local; for simplicity we tag as Z (ok for demo freshness).
         ts = f"{obs.get('DateObserved')}T{hour}:00:00Z"
         row = {
             "@timestamp": ts,
@@ -105,7 +116,8 @@ def airnow_latest(lat: float, lon: float, distance_miles: int = 50) -> List[Dict
     return rows
 
 def index_docs_idempotent(rows: List[Dict[str, Any]]) -> int:
-    if not rows: return 0
+    if not rows: 
+        return 0
     actions = []
     for r in rows:
         doc_id = f"{r.get('location_name')}|{r.get('pollutant')}|{r.get('@timestamp')}"
@@ -128,7 +140,64 @@ class AQResponse(BaseModel):
     rows: List[PollutantRow]
     exposure: Dict[str, Any]
 
-# ----- API -----
+# Ensure index exists on startup
+@app.on_event("startup")
+def ensure_index():
+    if not es.indices.exists(index=INDEX):
+        es.indices.create(index=INDEX, body={
+            "mappings": {
+                "properties": {
+                    "@timestamp": {"type": "date"},
+                    "pollutant": {"type": "keyword"},
+                    "value": {"type": "float"},
+                    "aqi": {"type": "integer"},
+                    "location": {"type": "geo_point"},
+                    "location_name": {"type": "keyword"}
+                }
+            }
+        })
+
+# ----- Debug Endpoint -----
+@app.get("/api/test-es")
+def test_es(lat: float = 37.9716, lon: float = -87.5711, radius_km: float = 25.0):
+    """Debug endpoint to test Elasticsearch queries"""
+    
+    # Test 1: Can we connect?
+    try:
+        es.ping()
+        connection_ok = True
+    except Exception as e:
+        return {"error": f"ES connection failed: {e}"}
+    
+    # Test 2: How many docs total?
+    count = es.count(index=INDEX)
+    
+    # Test 3: Latest query (what your backend uses)
+    latest_q = {
+        "size": 0,
+        "query": {"bool": {"filter": [
+            {"range": {"@timestamp": {"gte": "now-3h"}}},
+            {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
+        ]}},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
+                 "aggs": {"latest": {"top_hits": {"size": 1, "sort": [{"@timestamp": "desc"}],
+                           "_source": {"includes": ["aqi","value","unit","location_name"]}}}}}}
+    }
+    
+    try:
+        latest_res = es.search(index=INDEX, body=latest_q)
+        buckets = latest_res["aggregations"]["by_pollutant"]["buckets"]
+    except Exception as e:
+        return {"error": f"Query failed: {e}", "query": latest_q}
+    
+    return {
+        "connection_ok": connection_ok,
+        "total_docs": count['count'],
+        "buckets_found": len(buckets),
+        "buckets": buckets
+    }
+
+# ----- Main API -----
 @app.get("/api/aqi", response_model=AQResponse)
 def get_aqi(
     lat: float | None = Query(default=None),
@@ -152,25 +221,35 @@ def get_aqi(
             {"range": {"@timestamp": {"gte": "now-3h"}}},
             {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
         ]}},
-        "aggs": {"by_pollutant": {"terms": {"field": "pollutant.keyword", "size": 10},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
                  "aggs": {"latest": {"top_hits": {"size": 1, "sort": [{"@timestamp": "desc"}],
                            "_source": {"includes": ["aqi","value","unit","location_name"]}}}}}}
     }
-    latest_res = es.search(index=INDEX, body=latest_q)
-    buckets = latest_res["aggregations"]["by_pollutant"]["buckets"]
+    
+    try:
+        latest_res = es.search(index=INDEX, body=latest_q)
+        buckets = latest_res["aggregations"]["by_pollutant"]["buckets"]
+    except Exception as e:
+        raise HTTPException(500, f"Elasticsearch query failed: {e}")
 
-    # 3) If sparse, live-fetch from AirNow and index, then rerun
+    # 3) If sparse, try live-fetch from AirNow and index, then rerun
     if len(buckets) < 2:
         fetched = airnow_latest(lat, lon, distance_miles=int(radius_km * 0.621))
         if fetched:
             index_docs_idempotent(fetched)
-            latest_res = es.search(index=INDEX, body=latest_q)
-            buckets = latest_res["aggregations"]["by_pollutant"]["buckets"]
+            try:
+                latest_res = es.search(index=INDEX, body=latest_q)
+                buckets = latest_res["aggregations"]["by_pollutant"]["buckets"]
+            except Exception as e:
+                raise HTTPException(500, f"Elasticsearch requery failed: {e}")
 
     rows: List[PollutantRow] = []
     area_name = None
     for b in buckets:
-        src = b["latest"]["hits"]["hits"][0]["_source"]
+        hits = b["latest"]["hits"]["hits"]
+        if not hits:
+            continue
+        src = hits[0]["_source"]
         rows.append(PollutantRow(
             pollutant=b["key"],
             latest_aqi=src.get("aqi"),
@@ -187,11 +266,19 @@ def get_aqi(
             {"range": {"@timestamp": {"gte": "now-24h"}}},
             {"geo_distance": {"distance": f"{radius_km}km", "location": {"lat": lat, "lon": lon}}}
         ]}},
-        "aggs": {"by_pollutant": {"terms": {"field": "pollutant.keyword", "size": 10},
+        "aggs": {"by_pollutant": {"terms": {"field": "pollutant", "size": 10},
                  "aggs": {"avg_value": {"avg": {"field": "value"}}}}}
     }
-    avg_res = es.search(index=INDEX, body=avg_q)
-    avg_map = {b["key"]: b["avg_value"]["value"] for b in avg_res["aggregations"]["by_pollutant"]["buckets"]}
+    
+    try:
+        avg_res = es.search(index=INDEX, body=avg_q)
+        avg_map = {b["key"]: b["avg_value"]["value"] for b in avg_res["aggregations"]["by_pollutant"]["buckets"]}
+    except Exception as e:
+        avg_map = {}
+
+    # Update rows with 24h averages
+    for r in rows:
+        r.avg24_value = avg_map.get(r.pollutant)
 
     # 5) Overall category & exposure
     overall_aqi_vals = [r.latest_aqi for r in rows if r.latest_aqi is not None]
