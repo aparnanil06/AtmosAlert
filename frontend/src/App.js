@@ -27,15 +27,36 @@ function App() {
       const data = await response.json();
       setAqiData(data);
       // FEV1 5-year projection
-+     try {
-        const p = await fetch(`http://127.0.0.1:8000/api/predict?location=${encodeURIComponent(location)}`);
-        if (!p.ok) throw new Error('FEV1 API error');
-        const j = await p.json();
-        setFev1Data(j); // expects { projected_capacity_percent, risk_level, location }
-      } catch (e) {
-        console.warn('FEV1 fetch failed:', e);
-        setFev1Data(null);
-      }
+try {
+  const resp = await fetch(
+    `http://127.0.0.1:8000/api/predict?location=${encodeURIComponent(location)}`
+  );
+
+  // Read raw text first so we can surface backend errors that aren’t JSON
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`API ${resp.status}: ${text.slice(0,200)}`);
+  }
+
+  // Parse JSON safely
+  let fev1;
+  try {
+    fev1 = JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid JSON from API: ${text.slice(0,200)}`);
+  }
+
+  // Expect { projected_capacity_percent, risk_level, location }
+  if (typeof fev1.projected_capacity_percent !== "number") {
+    throw new Error("API missing projected_capacity_percent");
+  }
+
+  setFev1Data(fev1);
+} catch (e) {
+  console.error("FEV1 fetch failed:", e);
+  setFev1Data(null);
+  // optional: setError(String(e));
+}
     } catch (err) {
       setError(err.message);
       setAqiData(null);
