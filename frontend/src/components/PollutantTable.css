@@ -1,0 +1,81 @@
+/* src/components/PollutantTable.css */
+.pollutant-table {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.pollutant-table h2 {
+  color: #333;
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+td {
+  padding: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.pollutant-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.aqi-value {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #667eea;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.3rem 0.6rem;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+@media (max-width: 768px) {
+  th, td {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.85rem;
+  }
+  
+  .status-badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+  }
+}

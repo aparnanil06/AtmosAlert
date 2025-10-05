@@ -1,0 +1,59 @@
+/* src/components/LungVisualization.css */
+.lung-visualization {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-content {
+  width: 100%;
+  text-align: center;
+}
+
+.placeholder-box {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border: 3px dashed #667eea;
+  border-radius: 12px;
+  padding: 3rem;
+}
+
+.placeholder-box h3 {
+  font-size: 2rem;
+  color: #667eea;
+  margin-bottom: 1rem;
+}
+
+.placeholder-box > p {
+  color: #666;
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.data-preview {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+}
+
+.data-preview p {
+  margin: 0.5rem 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.instruction {
+  font-size: 0.9rem;
+  color: #999;
+  font-style: italic;
+  margin-top: 1rem;
+}
+
+.instruction code {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #667eea;
+}
