@@ -5,6 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo  # Py3.9+
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch, helpers
+import sys
 
 # ---------------- Env & ES ----------------
 load_dotenv()
@@ -149,16 +150,20 @@ def load_to_elastic(results: list[dict]):
 
 # ---------------- Main ----------------
 if __name__ == "__main__":
-    print("Fetching AirNow data for Evansville, IN (ZIP 47711)…")
-    data = fetch_airnow_by_zipcode("47711", distance_miles=50)
-
-    if not data:
-        print("ZIP returned nothing; trying coordinates near Evansville…")
-        # Downtown Evansville approx
-        data = fetch_airnow_by_coords(37.9716, -87.5711, distance_miles=50)
-
+    if len(sys.argv) > 1:
+        location = sys.argv[1]
+    else:
+        location = "47711"  # Default Evansville
+    
+    print(f"Fetching AirNow data for {location}...")
+    
+    if location.isdigit():
+        data = fetch_airnow_by_zipcode(location, distance_miles=50)
+    else:
+        # Assume it's "lat,lon" format
+        lat, lon = location.split(',')
+        data = fetch_airnow_by_coords(float(lat), float(lon), distance_miles=50)
+    
     if data:
         print("Stations:", sorted({d.get("location_name") for d in data if d.get("location_name")}))
         load_to_elastic(data)
-    else:
-        print("No data available from AirNow. Check your API key or widen distance.")
