@@ -11,6 +11,7 @@ function App() {
   const [aqiData, setAqiData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fev1Data, setFev1Data] = useState(null);
 
   const handleSearch = async (location) => {
     setLoading(true);
@@ -25,6 +26,16 @@ function App() {
       
       const data = await response.json();
       setAqiData(data);
+      // FEV1 5-year projection
++     try {
+        const p = await fetch(`http://127.0.0.1:8000/api/predict?location=${encodeURIComponent(location)}`);
+        if (!p.ok) throw new Error('FEV1 API error');
+        const j = await p.json();
+        setFev1Data(j); // expects { projected_capacity_percent, risk_level, location }
+      } catch (e) {
+        console.warn('FEV1 fetch failed:', e);
+        setFev1Data(null);
+      }
     } catch (err) {
       setError(err.message);
       setAqiData(null);
@@ -67,10 +78,11 @@ function App() {
             <div className="right-column">
               <div className="visualization-section">
                 <h2>Long-term Exposure Impact</h2>
-                <LungVisualization 
-                  exposureScore={aqiData.exposure} 
-                  aqi={aqiData.overall_aqi}
-                />
+                {fev1Data ? (
+                  <LungVisualization projectedCapacityPercent={fev1Data.projected_capacity_percent} />
+                ) : (
+                  <div style={{ height: 260 }} />  // optional spacer/skeleton
+                )}
               </div>
             </div>
           </div>
